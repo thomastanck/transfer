@@ -221,9 +221,9 @@ func main() {
 	router.GET("/", index)
 	router.GET("/newsession", newsession)
 	router.PUT("/up/:token", up)
-	router.PUT("/up/:token/*filename", up)
+	router.PUT("/up/:token/*unused", up)
 	router.GET("/down/:token", down)
-	router.GET("/down/:token/*filename", down)
+	router.GET("/down/:token/*unused", down)
 
 	log.Fatal(http.ListenAndServe(":8085", router))
 }
