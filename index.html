@@ -1,0 +1,74 @@
+<html>
+	<body>
+		<h1>Transfer files to someone else</h1>
+		<p>You need Javascript since this is an ajax uploader.</p>
+		<p>If you don't like it please look at the API documentation so you can cURL everything the way you want to</p>
+		<form id="file-form" action="/" method="PUT">
+			<input type="file" id="file-select" name="file"/>
+			<button type="submit" id="upload-button">Upload</button>
+		</form>
+		<p id="linklabel" style="display: none">Give this link to your friend:</p>
+		<a id="link" href=""></a>
+		<script>
+var form = document.getElementById('file-form');
+var fileSelect = document.getElementById('file-select');
+var uploadButton = document.getElementById('upload-button');
+var linklabel = document.getElementById('linklabel');
+var link = document.getElementById('link');
+
+form.onsubmit = function(event) {
+	event.preventDefault();
+
+	// Update button text.
+	uploadButton.innerHTML = 'Uploading...';
+
+	// Get the selected files from the input.
+	var files = fileSelect.files;
+	// Create a new FormData object.
+	//var formData = new FormData();
+	//// Loop through each of the selected files.
+	//for (var i = 0; i < files.length; i++) {
+	//	var file = files[i];
+
+	//	// Add the file to the request.
+	//	formData.append('file', file, file.name);
+	//	alert(file.read());
+	//}
+
+	var tokenxhr = new XMLHttpRequest();
+	tokenxhr.open('GET', '/newsession', true);
+	tokenxhr.onload = function () {
+		if (tokenxhr.status === 200) {
+			console.log(tokenxhr.responseText);
+			var token = tokenxhr.responseText;
+
+			console.log('Token:', token);
+
+			linklabel.style.display = 'inline';
+			link.href = '/down/'+token+'/'+files[0].name;
+			link.innerHTML = 'https://transfer.tomys.cc/down/'+token+'/'+files[0].name
+
+			// Set up the request.
+			var xhr = new XMLHttpRequest();
+			// Open the connection.
+			xhr.open('PUT', '/up/'+token, true);
+			// Set up a handler for when the request finishes.
+			xhr.onload = function () {
+				if (xhr.status === 200) {
+					// File(s) uploaded.
+					uploadButton.innerHTML = 'Upload';
+				} else {
+					alert('An error occurred!');
+				}
+			};
+			// Send the Data.
+			xhr.send(files[0]);
+		} else {
+			alert('Could not get token!');
+		}
+	}
+	tokenxhr.send();
+}
+		</script>
+	</body>
+</html>
