@@ -36,8 +36,8 @@ Upload your file to this endpoint. If the session doesn't exist or if a previous
 
 `GET /up/:token`
 
-`GET/up/:token/*unused`
+`GET /up/:token/*unused`
 
 ----
 
-Download the file from this endpoint. 
+Download the file from this endpoint. If the session doesn't exist or if a previous connection to this endpoint has already been made, the connection will be dropped.
