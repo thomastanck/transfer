@@ -228,5 +228,5 @@ func main() {
 	router.GET("/down/:token", down)
 	router.GET("/down/:token/*filename", down)
 
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":8085", router))
 }
