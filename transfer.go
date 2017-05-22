@@ -20,8 +20,7 @@ const (
 	statusReady
 	statusTransferring
 	statusCompleted
-	statusDownstreamClosed
-	statusUpstreamClosed
+	statusError
 )
 
 type httpConnection struct {
@@ -88,8 +87,16 @@ func (s *session) startTransfer() {
 	s.downstream.w.Header().Set("Content-Length", contentlength)
 	s.downstream.w.Header().Set("Content-Disposition", "attachment")
 
+	s.status = statusTransferring
+
 	// Copy from upstream body to downsteam response. Easy!
 	_, err := io.Copy(s.downstream.w, s.upstream.r.Body)
+
+	if err == nil {
+		s.status = statusCompleted
+	} else {
+		s.status = statusError
+	}
 
 	log.Printf("\t%s\tTransfer completed\n", s.token)
 
