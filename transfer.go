@@ -31,8 +31,8 @@ type session struct {
 	token  string
 	status transferStatus
 
-	upstreamCloser   chan bool
-	downstreamCloser chan bool
+	upstreamCloser   chan struct{}
+	downstreamCloser chan struct{}
 
 	timeoutTimer *time.Timer
 
@@ -50,7 +50,7 @@ func (s *session) setUpstream(w http.ResponseWriter, r *http.Request) bool {
 			s.status = statusReady
 			go s.startTransfer()
 		} else {
-			util.RefreshTimer(s.timeoutTimer, time.Second * 300)
+			util.RefreshTimer(s.timeoutTimer, time.Second*300)
 		}
 		return true
 	} else {
@@ -68,7 +68,7 @@ func (s *session) setDownstream(w http.ResponseWriter, r *http.Request) bool {
 			s.status = statusReady
 			go s.startTransfer()
 		} else {
-			util.RefreshTimer(s.timeoutTimer, time.Second * 300)
+			util.RefreshTimer(s.timeoutTimer, time.Second*300)
 		}
 		return true
 	} else {
@@ -103,8 +103,8 @@ func (s *session) startTransfer() {
 
 	// Makes it inaccessible, should mean that it gets garbage collected.
 	sessionsMut.Lock()
-	s.upstreamCloser <- err != nil
-	s.downstreamCloser <- err != nil
+	close(s.upstreamCloser)
+	close(s.downstreamCloser)
 	delete(sessions, s.token)
 	sessionsMut.Unlock()
 }
@@ -125,8 +125,8 @@ func sessionTimeoutHandler(s *session) {
 	sessionsMut.Lock()
 	defer sessionsMut.Unlock()
 	if s.status == statusWaiting {
-		s.upstreamCloser <- true
-		s.downstreamCloser <- true
+		close(s.upstreamCloser)
+		close(s.downstreamCloser)
 		delete(sessions, s.token)
 	}
 	log.Printf("\t%s\tTimeout. Num sessions: %d\n", s.token, len(sessions))
@@ -141,8 +141,8 @@ func newsession(w http.ResponseWriter, r *http.Request) {
 	}
 	session := session{
 		token:            token,
-		upstreamCloser:   make(chan bool, 1),
-		downstreamCloser: make(chan bool, 1),
+		upstreamCloser:   make(chan struct{}),
+		downstreamCloser: make(chan struct{}),
 		timeoutTimer:     time.NewTimer(time.Second * 60),
 	}
 	sessionsMut.Lock()
@@ -176,8 +176,8 @@ func up(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionsMut.Unlock()
 	log.Printf("\t%s\tWaiting on upstreamCloser\n", token)
-	err := <-session.upstreamCloser
-	if err {
+	<-session.upstreamCloser
+	if session.status == statusError {
 		util.DropConnection(w)
 		return
 	}
@@ -203,8 +203,8 @@ func down(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionsMut.Unlock()
 	log.Printf("\t%s\tWaiting on downstreamCloser\n", token)
-	err := <-session.downstreamCloser
-	if err {
+	<-session.downstreamCloser
+	if session.status == statusError {
 		util.DropConnection(w)
 		return
 	}
