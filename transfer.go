@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"github.com/thomastanck/transfer/util"
 	"io"
@@ -51,6 +50,8 @@ func (s *session) setUpstream(w http.ResponseWriter, r *http.Request) bool {
 			s.status = statusReady
 			util.StopAndConsumeTimer(s.timeoutTimer)
 			go s.startTransfer()
+		} else {
+			util.RefreshTimer(s.timeoutTimer, time.Second * 300)
 		}
 		return true
 	} else {
@@ -68,6 +69,8 @@ func (s *session) setDownstream(w http.ResponseWriter, r *http.Request) bool {
 			s.status = statusReady
 			util.StopAndConsumeTimer(s.timeoutTimer)
 			go s.startTransfer()
+		} else {
+			util.RefreshTimer(s.timeoutTimer, time.Second * 300)
 		}
 		return true
 	} else {
@@ -94,11 +97,11 @@ func (s *session) startTransfer() {
 
 	if err == nil {
 		s.status = statusCompleted
+		log.Printf("\t%s\tTransfer completed\n", s.token)
 	} else {
 		s.status = statusError
+		log.Printf("\t%s\tTransfer ended with error: %s\n", s.token, err)
 	}
-
-	log.Printf("\t%s\tTransfer completed\n", s.token)
 
 	// Makes it inaccessible, should mean that it gets garbage collected.
 	sessionsMut.Lock()
@@ -119,8 +122,8 @@ func index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	http.ServeFile(w, r, "index.html")
 }
 
-func sessionTimeoutHandler(s session) {
-	for {
+func sessionTimeoutHandler(s *session) {
+	for s.status == statusWaiting {
 		sessionsMut.Lock()
 		select {
 		case <-s.timeoutTimer.C:
@@ -131,6 +134,7 @@ func sessionTimeoutHandler(s session) {
 		default:
 		}
 		sessionsMut.Unlock()
+		time.Sleep(time.Second * 1)
 	}
 }
 
@@ -153,43 +157,34 @@ func newsession(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	sessionsMut.Unlock()
 
 	// Timeout handler
-	go sessionTimeoutHandler(session)
+	go sessionTimeoutHandler(&session)
 
 	io.WriteString(w, token)
-}
-
-func dropConnection(w http.ResponseWriter) {
-	if wr, ok := w.(http.Hijacker); ok {
-		conn, _, err := wr.Hijack()
-		if err != nil {
-			fmt.Fprint(w, err)
-		}
-		conn.Close()
-	}
 }
 
 func up(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	token := ps[0].Value
 	defer r.Body.Close()
-	defer log.Printf("\t%s\tClosing upstream connection", token)
+	defer log.Printf("\t%s\tClosing upstream connection\n", token)
 	sessionsMut.Lock()
 	session := sessions[token]
 	if session == nil {
 		sessionsMut.Unlock()
-		log.Printf("\t%s\tSession does not exist", token)
-		dropConnection(w)
+		log.Printf("\t%s\tSession does not exist\n", token)
+		util.DropConnection(w)
 		return
 	}
 	if !session.setUpstream(w, r) {
-		log.Printf("\t%s\tCould not connect to upstream channel", token)
-		dropConnection(w)
+		sessionsMut.Unlock()
+		log.Printf("\t%s\tCould not connect to upstream channel\n", token)
+		util.DropConnection(w)
 		return
 	}
-	util.RefreshTimer(session.timeoutTimer, time.Second * 300)
 	sessionsMut.Unlock()
+	log.Printf("\t%s\tWaiting on upstreamCloser\n", token)
 	err := <-session.upstreamCloser
 	if err {
-		dropConnection(w)
+		util.DropConnection(w)
 		return
 	}
 }
@@ -197,25 +192,26 @@ func up(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 func down(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	token := ps[0].Value
 	r.Body.Close()
-	defer log.Printf("\t%s\tClosing downstream connection", token)
+	defer log.Printf("\t%s\tClosing downstream connection\n", token)
 	sessionsMut.Lock()
 	session := sessions[token]
 	if session == nil {
 		sessionsMut.Unlock()
-		log.Printf("\t%s\tSession does not exist", token)
-		dropConnection(w)
+		log.Printf("\t%s\tSession does not exist\n", token)
+		util.DropConnection(w)
 		return
 	}
 	if !session.setDownstream(w, r) {
-		log.Printf("\t%s\tCould not connect to downstream channel", token)
-		dropConnection(w)
+		sessionsMut.Unlock()
+		log.Printf("\t%s\tCould not connect to downstream channel\n", token)
+		util.DropConnection(w)
 		return
 	}
-	util.RefreshTimer(session.timeoutTimer, time.Second * 300)
 	sessionsMut.Unlock()
+	log.Printf("\t%s\tWaiting on downstreamCloser\n", token)
 	err := <-session.downstreamCloser
 	if err {
-		dropConnection(w)
+		util.DropConnection(w)
 		return
 	}
 }

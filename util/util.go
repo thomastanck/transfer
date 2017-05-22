@@ -3,6 +3,8 @@ package util
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -37,6 +39,16 @@ func RefreshTimer(t *time.Timer, d time.Duration) {
 func StopAndConsumeTimer(t *time.Timer) {
 	if !t.Stop() {
 		<-t.C
+	}
+}
+
+func DropConnection(w http.ResponseWriter) {
+	if wr, ok := w.(http.Hijacker); ok {
+		conn, _, err := wr.Hijack()
+		if err != nil {
+			fmt.Fprint(w, err)
+		}
+		conn.Close()
 	}
 }
 
