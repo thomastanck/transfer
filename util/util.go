@@ -34,13 +34,6 @@ func RefreshTimer(t *time.Timer, d time.Duration) {
 	}
 	t.Reset(d)
 }
-// Like Stop but ensures that the timer does not fire at another goroutine
-// Ensure you lock sessionsMut when stopping timoutTimer's
-func StopAndConsumeTimer(t *time.Timer) {
-	if !t.Stop() {
-		<-t.C
-	}
-}
 
 func DropConnection(w http.ResponseWriter) {
 	if wr, ok := w.(http.Hijacker); ok {

@@ -48,7 +48,6 @@ func (s *session) setUpstream(w http.ResponseWriter, r *http.Request) bool {
 
 		if s.downstream != nil {
 			s.status = statusReady
-			util.StopAndConsumeTimer(s.timeoutTimer)
 			go s.startTransfer()
 		} else {
 			util.RefreshTimer(s.timeoutTimer, time.Second * 300)
@@ -67,7 +66,6 @@ func (s *session) setDownstream(w http.ResponseWriter, r *http.Request) bool {
 
 		if s.upstream != nil {
 			s.status = statusReady
-			util.StopAndConsumeTimer(s.timeoutTimer)
 			go s.startTransfer()
 		} else {
 			util.RefreshTimer(s.timeoutTimer, time.Second * 300)
@@ -123,19 +121,15 @@ func index(w http.ResponseWriter, r *http.Request) {
 }
 
 func sessionTimeoutHandler(s *session) {
-	for s.status == statusWaiting {
-		sessionsMut.Lock()
-		select {
-		case <-s.timeoutTimer.C:
-			s.upstreamCloser <- true
-			s.downstreamCloser <- true
-			delete(sessions, s.token)
-			log.Printf("\t%s\tTimeout. Num sessions: %d\n", s.token, len(sessions))
-		default:
-		}
-		sessionsMut.Unlock()
-		time.Sleep(time.Second * 1)
+	<-s.timeoutTimer.C
+	sessionsMut.Lock()
+	defer sessionsMut.Unlock()
+	if s.status == statusWaiting {
+		s.upstreamCloser <- true
+		s.downstreamCloser <- true
+		delete(sessions, s.token)
 	}
+	log.Printf("\t%s\tTimeout. Num sessions: %d\n", s.token, len(sessions))
 }
 
 func newsession(w http.ResponseWriter, r *http.Request) {
