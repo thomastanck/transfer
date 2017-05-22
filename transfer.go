@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/julienschmidt/httprouter"
+	"github.com/bouk/httprouter"
 	"github.com/thomastanck/transfer/util"
 	"io"
 	"log"
@@ -118,7 +118,7 @@ var sessions map[string]*session
 
 // Handlers
 
-func index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func index(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "index.html")
 }
 
@@ -138,7 +138,7 @@ func sessionTimeoutHandler(s *session) {
 	}
 }
 
-func newsession(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func newsession(w http.ResponseWriter, r *http.Request) {
 	token, err := util.GenerateRandomString(48)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -162,8 +162,8 @@ func newsession(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	io.WriteString(w, token)
 }
 
-func up(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	token := ps[0].Value
+func up(w http.ResponseWriter, r *http.Request) {
+	token := httprouter.GetParam(r, "token")
 	defer r.Body.Close()
 	defer log.Printf("\t%s\tClosing upstream connection\n", token)
 	sessionsMut.Lock()
@@ -189,8 +189,8 @@ func up(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	}
 }
 
-func down(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	token := ps[0].Value
+func down(w http.ResponseWriter, r *http.Request) {
+	token := httprouter.GetParam(r, "token")
 	r.Body.Close()
 	defer log.Printf("\t%s\tClosing downstream connection\n", token)
 	sessionsMut.Lock()
